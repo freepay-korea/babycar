@@ -1,0 +1,6 @@
+{
+  "name": "부릉부릉 놀이터 - 유아용 탈것 놀이",
+  "description": "2~5세 유아를 위한 재미있고 안전한 탈것 놀이 앱. 소방차, 경찰차, 중장비 등 다양한 탈것과 즐기는 감각 발달 놀이터!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

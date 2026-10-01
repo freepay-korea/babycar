@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="carRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f87171"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+
+  <!-- Sun sparkle -->
+  <circle cx="410" cy="100" r="36" fill="#fef08a" opacity="0.85"/>
+  <circle cx="410" cy="100" r="24" fill="#facc15"/>
+
+  <!-- Road base -->
+  <path d="M 0 400 L 512 400 L 512 512 L 0 512 Z" fill="#334155"/>
+  <rect x="60" y="445" width="80" height="12" rx="6" fill="#facc15"/>
+  <rect x="216" y="445" width="80" height="12" rx="6" fill="#facc15"/>
+  <rect x="372" y="445" width="80" height="12" rx="6" fill="#facc15"/>
+
+  <!-- Cute Red Car Body -->
+  <!-- Roof / cabin -->
+  <path d="M 160 270 L 210 160 Q 230 145 270 145 L 340 145 Q 375 145 395 185 L 435 270 Z" fill="#b91c1c"/>
+  <path d="M 172 265 L 218 168 Q 232 156 268 156 L 336 156 Q 368 156 386 192 L 422 265 Z" fill="#ef4444"/>
+
+  <!-- Windows -->
+  <path d="M 226 255 L 242 182 Q 248 172 268 172 L 295 172 L 295 255 Z" fill="#e0f2fe"/>
+  <path d="M 312 172 L 340 172 Q 358 172 372 195 L 400 255 L 312 255 Z" fill="#bae6fd"/>
+
+  <!-- Main Chassis -->
+  <rect x="70" y="260" width="372" height="95" rx="36" fill="url(#carRed)"/>
+  
+  <!-- Bumpers & trim -->
+  <rect x="58" y="318" width="396" height="18" rx="8" fill="#1e293b"/>
+  
+  <!-- Headlights -->
+  <circle cx="430" cy="298" r="16" fill="#fef08a"/>
+  <circle cx="430" cy="298" r="10" fill="#ffffff"/>
+  
+  <!-- Cute Eyes on Windshield -->
+  <circle cx="340" cy="215" r="14" fill="#ffffff"/>
+  <circle cx="344" cy="215" r="8" fill="#0f172a"/>
+  <circle cx="347" cy="211" r="3" fill="#ffffff"/>
+
+  <circle cx="270" cy="215" r="14" fill="#ffffff"/>
+  <circle cx="274" cy="215" r="8" fill="#0f172a"/>
+  <circle cx="277" cy="211" r="3" fill="#ffffff"/>
+
+  <!-- Cute Smile on Hood -->
+  <path d="M 370 295 Q 395 320 415 295" stroke="#7f1d1d" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="365" cy="302" r="7" fill="#f43f5e" opacity="0.6"/>
+
+  <!-- Wheels (Front & Back) -->
+  <!-- Left Wheel -->
+  <circle cx="160" cy="355" r="46" fill="#0f172a"/>
+  <circle cx="160" cy="355" r="22" fill="#e2e8f0"/>
+  <circle cx="160" cy="355" r="8" fill="#ef4444"/>
+
+  <!-- Right Wheel -->
+  <circle cx="352" cy="355" r="46" fill="#0f172a"/>
+  <circle cx="352" cy="355" r="22" fill="#e2e8f0"/>
+  <circle cx="352" cy="355" r="8" fill="#ef4444"/>
+</svg>
