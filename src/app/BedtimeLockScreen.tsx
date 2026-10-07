@@ -150,6 +150,7 @@ export const BedtimeLockScreen: React.FC<BedtimeLockScreenProps> = ({
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            style={{ touchAction: 'none' }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 text-xs font-black text-slate-300 shadow-xl active:scale-95 transition-all cursor-pointer"
           >
             <Lock className="w-4 h-4 text-amber-400" />

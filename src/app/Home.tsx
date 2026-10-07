@@ -152,6 +152,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onOpenParentGate }) =>
               onPointerUp={handleSettingsUp}
               onPointerLeave={handleSettingsUp}
               onPointerCancel={handleSettingsUp}
+              style={{ touchAction: 'none' }}
               aria-label="부모 설정 (3초 누름)"
               className="w-12 h-12 md:w-13 md:h-13 rounded-2xl flex items-center justify-center bg-white/90 hover:bg-white border-3 border-amber-300 text-slate-700 shadow-md transition-all active:scale-90 cursor-pointer relative overflow-hidden"
             >

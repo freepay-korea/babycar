@@ -74,7 +74,7 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
+          enabled: false, // 개발 중에는 서비스워커 캐시 때문에 옛 화면이 보이지 않도록 끔
           type: 'module',
         },
       }),

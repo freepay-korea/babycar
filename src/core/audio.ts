@@ -71,6 +71,7 @@ class AudioManager {
   }
 
   public unlockAudio() {
+    this.primeSpeech();
     if (this.isUnlocked && this.ctx && this.ctx.state === 'running') return;
 
     try {
@@ -592,14 +593,47 @@ class AudioManager {
     }
   }
 
+  private speechPrimed = false;
+  private speakTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // iOS는 첫 음성이 반드시 터치 안에서 시작돼야 함 → 첫 터치에서 빈 문장을 한 번 말해 둠
+  private primeSpeech() {
+    if (this.speechPrimed || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    this.speechPrimed = true;
+    try {
+      const u = new SpeechSynthesisUtterance('');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+      // 음성 목록을 미리 불러 둠 (처음엔 비어 있는 브라우저가 많음)
+      window.speechSynthesis.getVoices();
+    } catch {
+      // 지원하지 않는 브라우저
+    }
+  }
+
   // 한국어 TTS 함수 speak(text) (켜기/끄기 지원)
   public speak(text: string) {
-    if (!this.ttsEnabled) return;
+    if (!this.ttsEnabled || !text) return;
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
     try {
-      window.speechSynthesis.cancel(); // 이전 음성 즉시 중단
+      // 이전 음성 즉시 중단. Android Chrome은 cancel 직후 speak하면 소리가 안 나는 경우가 있어 잠깐 뒤에 말함
+      if (this.speakTimer) clearTimeout(this.speakTimer);
+      const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+      window.speechSynthesis.cancel();
+      if (wasSpeaking) {
+        this.speakTimer = setTimeout(() => this.speakNow(text), 80);
+      } else {
+        this.speakNow(text);
+      }
+    } catch {
+      // fallback
+    }
+  }
 
+  private speakNow(text: string) {
+    if (!this.ttsEnabled) return;
+    try {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ko-KR';
       utterance.rate = 0.95; // 유아가 편안하게 듣는 약간 부드럽고 또렷한 속도

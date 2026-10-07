@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">부릉부릉 놀이터</string>
+    <string name="title_activity_main">부릉부릉 놀이터</string>
+    <string name="package_name">com.meen.bungbung</string>
+    <string name="custom_url_scheme">com.meen.bungbung</string>
+</resources>

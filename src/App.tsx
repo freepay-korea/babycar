@@ -71,7 +71,7 @@ export default function App() {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col overflow-hidden bg-sky-300 select-none touch-none">
+    <div className="w-full h-full flex flex-col overflow-hidden bg-sky-300 select-none">
       {/* 타이머 종료 시 차고로 가자(잠자기 잠금 화면) */}
       {isSleeping ? (
         <BedtimeLockScreen onOpenParentGate={handleOpenParentGate} />
