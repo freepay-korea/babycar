@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { audioManager } from './audio';
 
 export interface StickerPlacement {
   id: string;
@@ -121,7 +122,10 @@ const loadSavedCars = (): CarDesign[] => {
   const raw = storage.get('bungbung_custom_cars');
   if (!raw) return [];
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((c) => c && typeof c.id === 'string' && typeof c.svg === 'string').slice(0, 12)
+      : [];
   } catch {
     return [];
   }
@@ -229,3 +233,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ customCars: updated });
   },
 }));
+
+// 스토어 설정(음성·효과음·볼륨)을 오디오 엔진에 항상 반영
+const syncAudio = (state: AppState) => {
+  audioManager.setTtsEnabled(state.voiceEnabled);
+  audioManager.setSfxEnabled(state.soundEnabled);
+  audioManager.setVolume(state.volume);
+};
+syncAudio(useAppStore.getState());
+useAppStore.subscribe(syncAudio);

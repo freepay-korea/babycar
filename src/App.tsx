@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from './core/store';
 import { Home } from './app/Home';
 import { ModeScreen } from './app/ModeScreen';
@@ -16,16 +16,17 @@ export default function App() {
   const [currentModeId, setCurrentModeId] = useState<string | null>(null);
   const [parentGateMode, setParentGateMode] = useState<'settings' | 'exit'>('settings');
 
-  const {
-    isSleeping,
-    parentGateOpen,
-    settingsOpen,
-    timerActive,
-    setParentGateOpen,
-    setSettingsOpen,
-    resetBedtime,
-    decrementTimer,
-  } = useAppStore();
+  // 필요한 값만 구독 (타이머가 매초 바뀌어도 App 전체가 다시 그려지지 않도록)
+  const isSleeping = useAppStore((s) => s.isSleeping);
+  const parentGateOpen = useAppStore((s) => s.parentGateOpen);
+  const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const timerActive = useAppStore((s) => s.timerActive);
+  const setParentGateOpen = useAppStore((s) => s.setParentGateOpen);
+  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
+  const resetBedtime = useAppStore((s) => s.resetBedtime);
+  const decrementTimer = useAppStore((s) => s.decrementTimer);
+
+  const goHome = useCallback(() => setCurrentModeId(null), []);
 
   const currentModeRef = useRef<string | null>(null);
   currentModeRef.current = currentModeId;
@@ -55,15 +56,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [timerActive, isSleeping, decrementTimer]);
 
-  const handleOpenParentGate = () => {
+  const handleOpenParentGate = useCallback(() => {
     setParentGateMode('settings');
     setParentGateOpen(true);
-  };
+  }, [setParentGateOpen]);
 
   const handleParentGateSuccess = () => {
     setParentGateOpen(false);
     if (isSleeping) {
       resetBedtime();
+      setCurrentModeId(null);
     }
     setSettingsOpen(true);
   };
@@ -76,7 +78,7 @@ export default function App() {
       ) : currentModeId ? (
         <ModeScreen
           modeId={currentModeId}
-          onBack={() => setCurrentModeId(null)}
+          onBack={goHome}
         />
       ) : (
         <Home

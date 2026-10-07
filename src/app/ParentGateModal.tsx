@@ -141,7 +141,8 @@ export const ParentGateModal: React.FC<ParentGateModalProps> = ({
             <div className="w-full bg-amber-50 rounded-2xl p-4 border-2 border-amber-200 mb-5">
               <span className="text-xs font-bold text-amber-700 block mb-1">문제</span>
               <div className="text-2xl font-black text-amber-950 tracking-wide">
-                "{KOREAN_NUMS[num1]} 더하기 {KOREAN_NUMS[num2]}은?"
+                "{KOREAN_NUMS[num1]} 더하기 {KOREAN_NUMS[num2]}
+                {num2 === 1 ? '는' : '은'}?"
               </div>
             </div>
 

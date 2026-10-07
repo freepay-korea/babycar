@@ -1,6 +1,6 @@
 import { PlayMode, PlayModeContext } from '../types';
 import { useAppStore, CarDesign, StickerPlacement } from '../../core/store';
-import { burst, triggerCelebrationConfetti } from '../../core/particles';
+import { burst, burstAtElement, triggerCelebrationConfetti } from '../../core/particles';
 
 type GarageStep = 'body' | 'wheels' | 'colors' | 'stickers' | 'drive';
 
@@ -47,12 +47,17 @@ export const garageMode: PlayMode = {
 
     const container = document.createElement('div');
     container.className =
-      'relative w-full h-full flex flex-col justify-between items-center p-3 pt-20 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-amber-100 via-orange-50 to-yellow-100 select-none';
+      'relative w-full h-full flex flex-col justify-between items-center p-3 pt-24 [@media(max-height:500px)]:pt-3 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-amber-100 via-orange-50 to-yellow-100 select-none';
+    container.style.touchAction = 'pan-y';
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const later = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(() => !isCleanedUp && fn(), ms));
+    };
 
     // 1. 상단 단계 표시줄 (차체 - 바퀴 - 색 - 스티커 - 주행)
     const stepperContainer = document.createElement('div');
     stepperContainer.className =
-      'w-full max-w-xl mx-auto flex items-center justify-between bg-white/95 backdrop-blur-md px-3 py-2 rounded-3xl border-3 border-amber-300 shadow-xl mb-2 z-20';
+      'w-full max-w-xl mx-auto flex items-center justify-between bg-white/95 backdrop-blur-md px-3 py-2 rounded-3xl border-3 border-amber-300 shadow-xl mb-2 [@media(max-height:500px)]:mb-1 z-20';
 
     const steps: Array<{ key: GarageStep; label: string; icon: string }> = [
       { key: 'body', label: '차체', icon: '🚙' },
@@ -95,11 +100,11 @@ export const garageMode: PlayMode = {
     // 2. 중앙 메인 작업대 (자동차 뷰포트)
     const garageBay = document.createElement('div');
     garageBay.className =
-      'relative flex-1 w-full max-w-2xl flex items-center justify-center my-auto min-h-[220px]';
+      'relative flex-1 w-full max-w-2xl flex items-center justify-center my-auto min-h-[220px] [@media(max-height:500px)]:min-h-[110px]';
 
     const carWrapper = document.createElement('div');
     carWrapper.className =
-      'car-display relative w-72 h-44 md:w-96 md:h-56 flex items-center justify-center transition-all duration-300';
+      'car-display relative w-72 h-44 md:w-96 md:h-56 [@media(max-height:500px)]:w-44 [@media(max-height:500px)]:h-28 flex items-center justify-center transition-all duration-300';
     garageBay.appendChild(carWrapper);
     container.appendChild(garageBay);
 
@@ -114,7 +119,7 @@ export const garageMode: PlayMode = {
     // ==================================================
     // 차체 SVG 생성기 (부위별 분할: body, roof, bumper, wheelSlots)
     // ==================================================
-    const getCarSvg = () => {
+    const getCarSvg = (forSave = false) => {
       let bodyPath = '';
       let roofPath = '';
       let bumperPath = '';
@@ -152,7 +157,7 @@ export const garageMode: PlayMode = {
 
       // 바퀴 그래픽
       const getWheelSvg = (cx: number) => {
-        const spinClass = isDrillSpinning || isDriving ? 'animate-spin' : '';
+        const spinClass = !forSave && (isDrillSpinning || isDriving) ? 'animate-spin' : '';
         if (selectedWheels === 'monster') {
           return `
             <g class="vehicle-wheel ${spinClass}" style="transform-origin: ${cx}px ${wY}px;">
@@ -198,31 +203,36 @@ export const garageMode: PlayMode = {
       const stickerElements = stickers
         .map(
           (s) => `
-          <text x="${s.x}%" y="${s.y}%" font-size="${24 * s.scale}" transform="rotate(${s.rot} ${s.x} ${s.y})" text-anchor="middle" dominant-baseline="central" class="select-none">
-            ${s.icon}
-          </text>
+          <text x="${s.x}" y="${s.y}" font-size="${18 * s.scale}" transform="rotate(${s.rot} ${s.x} ${s.y})" text-anchor="middle" dominant-baseline="central" style="pointer-events:none">${s.icon}</text>
         `
         )
         .join('');
 
+      // 저장용 SVG에는 id를 넣지 않음 (여러 대가 한 화면에 나올 때 id 중복 방지)
+      const partAttr = (part: CarPart) => (forSave ? '' : `data-part="${part}" style="cursor:pointer"`);
       return `
-        <svg viewBox="0 0 160 100" class="w-full h-full drop-shadow-2xl">
+        <svg viewBox="0 0 160 100" class="w-full h-full drop-shadow-2xl" style="overflow:visible">
           <!-- 지붕 / 캡 -->
-          <path id="part-roof" d="${roofPath}" fill="${colors.roof}" class="cursor-pointer transition-colors duration-200"/>
+          <path ${partAttr('roof')} d="${roofPath}" fill="${colors.roof}"/>
           
           <!-- 차체 메인 -->
-          <path id="part-body" d="${bodyPath}" fill="${colors.body}" class="cursor-pointer transition-colors duration-200"/>
+          <path ${partAttr('body')} d="${bodyPath}" fill="${colors.body}"/>
           
           <!-- 창문 -->
-          ${windowPath}
+          <g style="pointer-events:none">${windowPath}</g>
 
           <!-- 범퍼 / 장식선 -->
-          <path id="part-bumper" d="${bumperPath}" fill="${colors.bumper}" class="cursor-pointer transition-colors duration-200"/>
+          <path ${partAttr('bumper')} d="${bumperPath}" fill="${colors.bumper}"/>
+
+          <!-- 색이 퍼지는 효과 레이어 -->
+          <g class="paint-fx"></g>
 
           <!-- 눈망울 -->
+          <g style="pointer-events:none">
           <circle cx="132" cy="50" r="5" fill="#ffffff"/>
           <circle cx="133.5" cy="50" r="2.5" fill="#0f172a"/>
           <circle cx="134.5" cy="49" r="1" fill="#ffffff"/>
+          </g>
 
           <!-- 스티커 레이어 -->
           <g class="stickers-group">
@@ -236,29 +246,75 @@ export const garageMode: PlayMode = {
       `;
     };
 
-    // 자동차 렌더 및 이벤트 리스너 바인딩
+    // 자동차 렌더
     const updateCarDisplay = () => {
       carWrapper.innerHTML = getCarSvg();
-
-      // 색칠 모드일 때 클릭 시 철퍽 소리와 함께 색칠
-      if (step === 'colors') {
-        const pRoof = carWrapper.querySelector('#part-roof');
-        const pBody = carWrapper.querySelector('#part-body');
-        const pBumper = carWrapper.querySelector('#part-bumper');
-
-        const applyColor = (part: CarPart) => {
-          colors[part] = activePaletteColor;
-          ctx.audio.playWater();
-          ctx.audio.triggerHaptic(20);
-          burst(window.innerWidth / 2, window.innerHeight * 0.45, 'drop', 6);
-          updateCarDisplay();
-        };
-
-        if (pRoof) pRoof.addEventListener('pointerdown', () => applyColor('roof'));
-        if (pBody) pBody.addEventListener('pointerdown', () => applyColor('body'));
-        if (pBumper) pBumper.addEventListener('pointerdown', () => applyColor('bumper'));
-      }
     };
+
+    // 색칠: 탭한 지점부터 원이 퍼지듯 새 색이 채워짐
+    let paintAnim: number | null = null;
+    const applyColor = (part: CarPart, e: PointerEvent) => {
+      const svg = carWrapper.querySelector('svg') as SVGSVGElement | null;
+      const partEl = carWrapper.querySelector(`[data-part="${part}"]`) as SVGPathElement | null;
+      const fx = carWrapper.querySelector('.paint-fx');
+      const newColor = activePaletteColor;
+      ctx.audio.playWater();
+      ctx.audio.playPop(260); // 철퍽!
+      ctx.audio.triggerHaptic(20);
+      burst(e.clientX, e.clientY, 'drop', 8);
+
+      const ctm = svg?.getScreenCTM();
+      if (!svg || !partEl || !fx || !ctm || paintAnim !== null) {
+        colors[part] = newColor;
+        updateCarDisplay();
+        return;
+      }
+      const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      const ns = 'http://www.w3.org/2000/svg';
+      const clipId = `paint-clip-${Date.now()}`;
+      const clip = document.createElementNS(ns, 'clipPath');
+      clip.setAttribute('id', clipId);
+      const circle = document.createElementNS(ns, 'circle');
+      circle.setAttribute('cx', String(pt.x));
+      circle.setAttribute('cy', String(pt.y));
+      circle.setAttribute('r', '0');
+      clip.appendChild(circle);
+      const paint = document.createElementNS(ns, 'path');
+      paint.setAttribute('d', partEl.getAttribute('d') || '');
+      paint.setAttribute('fill', newColor);
+      paint.setAttribute('clip-path', `url(#${clipId})`);
+      paint.setAttribute('style', 'pointer-events:none');
+      fx.appendChild(clip);
+      fx.appendChild(paint);
+      // 해당 부위 바로 위에 보이도록 부위 다음에 배치
+      partEl.after(fx);
+
+      const start = performance.now();
+      const spread = (now: number) => {
+        if (isCleanedUp) return;
+        const t = Math.max(0, Math.min(1, (now - start) / 420));
+        circle.setAttribute('r', String(180 * (1 - Math.pow(1 - t, 3))));
+        if (t < 1) {
+          paintAnim = requestAnimationFrame(spread);
+        } else {
+          paintAnim = null;
+          colors[part] = newColor;
+          updateCarDisplay();
+        }
+      };
+      paintAnim = requestAnimationFrame(spread);
+    };
+
+    carWrapper.addEventListener('pointerdown', (e) => {
+      if (step !== 'colors' || isDriving) return;
+      const target = (e.target as Element).closest('[data-part]');
+      const part = target?.getAttribute('data-part') as CarPart | null;
+      if (part) {
+        applyColor(part, e);
+      } else {
+        ctx.audio.playPop(500);
+      }
+    });
 
     // ==================================================
     // 단계별 컨트롤 패널 UI 렌더링
@@ -325,18 +381,17 @@ export const garageMode: PlayMode = {
             selectedWheels = w.type;
 
             // 드릴 소리 + 햅틱 + 바퀴 회전 애니메이션
-            ctx.audio.playEngine();
             ctx.audio.triggerHaptic(40);
             ctx.audio.speak(`${w.label} 착!`);
 
+            ctx.audio.playDrill();
             isDrillSpinning = true;
-            updateCarDisplay();
-            setTimeout(() => {
+            updateAllUI();
+            burstAtElement(carWrapper, 'star', 10);
+            later(() => {
               isDrillSpinning = false;
               updateCarDisplay();
-            }, 500);
-
-            updateAllUI();
+            }, 600);
           };
           row.appendChild(btn);
         });
@@ -356,7 +411,7 @@ export const garageMode: PlayMode = {
 
         PALETTE.forEach((color) => {
           const colorBtn = document.createElement('button');
-          colorBtn.className = `w-11 h-11 md:w-12 md:h-12 rounded-full shadow-lg border-4 transition-transform cursor-pointer active:scale-90 ${
+          colorBtn.className = `w-12 h-12 md:w-16 md:h-16 rounded-full shadow-lg border-4 transition-transform cursor-pointer active:scale-90 ${
             activePaletteColor === color
               ? 'scale-125 border-white ring-4 ring-amber-400'
               : 'border-white/80'
@@ -379,7 +434,7 @@ export const garageMode: PlayMode = {
         guide.className = 'flex items-center justify-between text-xs font-black text-amber-900 px-1';
         guide.innerHTML = `
           <span>스티커를 터치하면 차에 착 붙어요!</span>
-          <button id="clear-stickers" class="text-rose-500 font-bold underline cursor-pointer">모두 떼기</button>
+          <button id="clear-stickers" class="min-h-[44px] px-3 rounded-2xl bg-rose-100 text-rose-600 font-black cursor-pointer">🧽 모두 떼기</button>
         `;
         panelContainer.appendChild(guide);
 
@@ -398,12 +453,13 @@ export const garageMode: PlayMode = {
         STICKER_LIST.forEach((icon) => {
           const sBtn = document.createElement('button');
           sBtn.className =
-            'w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-amber-50 hover:bg-amber-100 active:scale-90 border-2 border-amber-300 text-2xl md:text-3xl flex items-center justify-center shrink-0 cursor-pointer shadow';
+            'w-16 h-16 rounded-2xl bg-amber-50 hover:bg-amber-100 active:scale-90 border-2 border-amber-300 text-2xl md:text-3xl flex items-center justify-center shrink-0 cursor-pointer shadow';
           sBtn.textContent = icon;
           sBtn.onclick = () => {
-            // 차체 내부 랜덤 위치에 배치
-            const x = 30 + Math.random() * 45;
-            const y = 35 + Math.random() * 25;
+            if (stickers.length >= 12) stickers.shift(); // 너무 많이 붙으면 오래된 것부터 떼기
+            // 차체 안쪽 랜덤 위치(viewBox 좌표)에 배치
+            const x = 40 + Math.random() * 80;
+            const y = 46 + Math.random() * 16;
             stickers.push({
               id: Math.random().toString(),
               icon,
@@ -414,8 +470,8 @@ export const garageMode: PlayMode = {
             });
             ctx.audio.playDing(1100);
             ctx.audio.triggerHaptic(20);
-            burst(window.innerWidth / 2, window.innerHeight * 0.45, 'star', 6);
-            updateAllUI();
+            burstAtElement(carWrapper, 'star', 8);
+            updateCarDisplay();
           };
           stickerRow.appendChild(sBtn);
         });
@@ -448,6 +504,22 @@ export const garageMode: PlayMode = {
         driveControls.appendChild(saveBtn);
         panelContainer.appendChild(driveControls);
       }
+
+      // 다음 단계로 가는 큰 화살표 버튼 (글을 몰라도 ▶ 모양으로 알 수 있게)
+      const idx = steps.findIndex((st) => st.key === step);
+      if (idx < steps.length - 1) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className =
+          'self-center min-h-[64px] px-8 rounded-2xl bg-emerald-500 active:scale-95 text-white font-black text-2xl border-3 border-emerald-300 shadow-lg flex items-center gap-2 cursor-pointer';
+        nextBtn.innerHTML = `<span>${steps[idx + 1].icon}</span><span>▶</span>`;
+        nextBtn.onclick = () => {
+          step = steps[idx + 1].key;
+          ctx.audio.playPop(620);
+          ctx.audio.speak(steps[idx + 1].label);
+          updateAllUI();
+        };
+        panelContainer.appendChild(nextBtn);
+      }
     };
 
     updateAllUI();
@@ -477,32 +549,53 @@ export const garageMode: PlayMode = {
       carWrapper.style.transition = 'transform 0.8s ease-in';
       carWrapper.style.transform = 'translateX(60px) translateY(-25px) rotate(-14deg)';
 
-      // 꽃 바퀴 파티클 방출
-      if (selectedWheels === 'flower') {
-        burst(window.innerWidth / 2, window.innerHeight * 0.4, 'star', 12);
-      }
+      // 바퀴별 특징: 몬스터=크게 통통, 번개=빠르게, 꽃=꽃잎
+      const speedMul = selectedWheels === 'lightning' ? 0.6 : 1;
+      const bounce = selectedWheels === 'monster' ? 2.2 : 1;
+      const trail = window.setInterval(() => {
+        if (isCleanedUp) return;
+        const r = carWrapper.getBoundingClientRect();
+        const kind = selectedWheels === 'flower' ? 'bubble' : selectedWheels === 'lightning' ? 'star' : 'smoke';
+        burst(r.left + r.width * 0.2, r.bottom - 10, kind, selectedWheels === 'standard' ? 2 : 4);
+      }, 90);
+      timers.push(trail as unknown as ReturnType<typeof setTimeout>);
+
+      const go = (transform: string, ms: number, easing = 'ease-in-out') => {
+        carWrapper.style.transition = `transform ${ms}ms ${easing}`;
+        carWrapper.style.transform = transform;
+      };
+
+      // 1. 뒤로 살짝 물러났다가 오르막
+      go('translateX(-40px)', 300 * speedMul);
+      later(() => go(`translateX(40px) translateY(${-20 * bounce}px) rotate(-12deg)`, 600 * speedMul, 'ease-in'), 300 * speedMul);
 
       // 2. 점프대 도약 (공중 점프)
-      setTimeout(() => {
-        carWrapper.style.transition = 'transform 0.6s ease-out';
-        const jumpScale = selectedWheels === 'monster' ? 'scale(1.25)' : 'scale(1.1)';
-        carWrapper.style.transform = `translateX(140px) translateY(-50px) rotate(10deg) ${jumpScale}`;
-        ctx.audio.playDing(1200);
+      later(() => {
+        go(`translateX(100px) translateY(${-50 * bounce}px) rotate(8deg) scale(${bounce > 1 ? 1.15 : 1.05})`, 450 * speedMul, 'ease-out');
+        ctx.audio.playBoing();
+      }, 900 * speedMul);
 
-        if (selectedWheels === 'lightning') {
-          burst(window.innerWidth / 2 + 50, window.innerHeight * 0.35, 'star', 15);
-        }
-      }, 800);
+      // 3. 쿵! 착지 (몬스터 바퀴는 통통 튀기)
+      later(() => {
+        go('translateX(60px) translateY(0) rotate(0deg) scale(1)', 300 * speedMul, 'ease-in');
+        ctx.audio.playPop(200);
+      }, 1350 * speedMul);
+      if (bounce > 1) {
+        later(() => go('translateX(40px) translateY(-36px) rotate(-4deg)', 220, 'ease-out'), 1650);
+        later(() => go('translateX(20px) translateY(0) rotate(0deg)', 220, 'ease-in'), 1870);
+      }
 
-      // 3. 착지 및 제자리 복귀
-      setTimeout(() => {
-        carWrapper.style.transition = 'transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        carWrapper.style.transform = 'translateX(0) translateY(0) rotate(0deg) scale(1)';
+      // 4. 제자리 복귀 + 축하
+      later(() => {
+        clearInterval(trail);
+        go('translateX(0) translateY(0) rotate(0deg) scale(1)', 600, 'cubic-bezier(0.34, 1.56, 0.64, 1)');
         ctx.audio.playHorn();
         ctx.audio.playFanfare();
         triggerCelebrationConfetti();
         isDriving = false;
-      }, 1450);
+        updateCarDisplay();
+      }, bounce > 1 ? 2150 : 1700 * speedMul);
+      updateCarDisplay(); // 바퀴 회전 시작
     };
 
     // ==================================================
@@ -525,7 +618,7 @@ export const garageMode: PlayMode = {
         colors: { ...colors },
         wheels: selectedWheels,
         stickers: [...stickers],
-        svg: getCarSvg(),
+        svg: getCarSvg(true),
         createdAt: Date.now(),
       };
 
@@ -564,6 +657,11 @@ export const garageMode: PlayMode = {
 
     return () => {
       isCleanedUp = true;
+      timers.forEach((t) => {
+        clearTimeout(t);
+        clearInterval(t);
+      });
+      if (paintAnim !== null) cancelAnimationFrame(paintAnim);
       if (container.parentElement) {
         container.parentElement.removeChild(container);
       }

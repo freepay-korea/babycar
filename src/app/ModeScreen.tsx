@@ -11,22 +11,35 @@ interface ModeScreenProps {
 export const ModeScreen: React.FC<ModeScreenProps> = ({ modeId, onBack }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const mode = getModeById(modeId);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
 
+  // 모드는 modeId가 바뀔 때만 새로 마운트 (부모가 다시 그려져도 놀이가 초기화되지 않게)
   useEffect(() => {
     if (!mode || !mountRef.current) return;
 
     const el = mountRef.current;
     el.innerHTML = '';
 
-    const cleanup = mode.mount(el, {
-      audio: audioManager,
-      onBack,
-    });
+    let cleanup: (() => void) | undefined;
+    try {
+      cleanup = mode.mount(el, {
+        audio: audioManager,
+        onBack: () => onBackRef.current(),
+      });
+    } catch (err) {
+      console.error(`[${modeId}] mount 실패`, err);
+    }
 
     return () => {
-      if (cleanup) cleanup();
+      try {
+        cleanup?.();
+      } catch (err) {
+        console.error(`[${modeId}] cleanup 실패`, err);
+      }
+      el.innerHTML = '';
     };
-  }, [mode, modeId, onBack]);
+  }, [mode, modeId]);
 
   const handleHomeClick = () => {
     audioManager.playPop(520);
@@ -61,7 +74,7 @@ export const ModeScreen: React.FC<ModeScreenProps> = ({ modeId, onBack }) => {
       </div>
 
       {/* 모드 마운트 컨테이너 */}
-      <div ref={mountRef} className="relative w-full h-full flex-1" />
+      <div ref={mountRef} className="relative w-full h-full flex-1 overflow-hidden" />
     </div>
   );
 };

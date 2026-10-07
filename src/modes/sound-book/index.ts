@@ -15,7 +15,9 @@ export const soundBookMode: PlayMode = {
 
     const container = document.createElement('div');
     container.className =
-      'w-full h-full flex flex-col justify-between p-4 pt-20 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-amber-200 via-orange-100 to-yellow-100 select-none';
+      'w-full h-full flex flex-col p-4 pt-24 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-amber-200 via-orange-100 to-yellow-100 select-none';
+    // 전역 touch-action:none 때문에 막힌 세로 스크롤을 이 화면에서만 허용
+    container.style.touchAction = 'pan-y';
 
     // 1. 상단 안내 헤더 배지
     const header = document.createElement('div');
@@ -65,11 +67,20 @@ export const soundBookMode: PlayMode = {
       const actor = card.querySelector('.vehicle-actor') as HTMLElement;
       let isAnimating = false;
 
+      // 스크롤하려고 끌 때는 소리가 나지 않도록 '짧게 누름'일 때만 반응
+      let downX = 0;
+      let downY = 0;
       card.addEventListener('pointerdown', (e) => {
+        downX = e.clientX;
+        downY = e.clientY;
+        ctx.audio.playPop(520); // 100ms 안에 즉시 반응
+      });
+      card.addEventListener('pointerup', (e) => {
+        if (isCleanedUp) return;
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) > 12) return;
         e.stopPropagation();
 
-        // 1. 즉각적인 팝 사운드 + 햅틱
-        ctx.audio.playPop(520);
+        // 1. 햅틱
         ctx.audio.triggerHaptic(30);
 
         // 2. 탈것 고유 소리 재생
@@ -79,7 +90,6 @@ export const soundBookMode: PlayMode = {
         ctx.audio.speak(v.voiceText);
 
         // 4. 화면 터치 위치에 화려한 파티클 버스트 (별 + 연기)
-        const rect = card.getBoundingClientRect();
         burst(e.clientX, e.clientY, 'star', 10);
         burst(e.clientX, e.clientY, 'smoke', 6);
 
@@ -114,7 +124,7 @@ function playVehicleSpecificAnimation(
   card: HTMLElement,
   onDone: () => void
 ) {
-  // 바퀴 회전 클래스 활성화
+  // 바퀴 회전 (정비소에서 만든 차의 바퀴 그룹)
   const wheels = actor.querySelectorAll('.vehicle-wheel');
   wheels.forEach((w) => w.classList.add('animate-spin'));
 
@@ -171,32 +181,39 @@ function playVehicleSpecificAnimation(
   }, 400);
 }
 
+// 탈것마다 얼굴(눈·입)이 놓일 자리 (viewBox 160x100 기준)
+const FACE_POS: Record<string, { x: number; y: number; r?: number }> = {
+  'fire-truck': { x: 118, y: 39 },
+  'police-car': { x: 112, y: 47, r: 5 },
+  bus: { x: 117, y: 41 },
+  excavator: { x: 53, y: 50, r: 5 },
+  train: { x: 40, y: 39, r: 5 },
+  helicopter: { x: 97, y: 46, r: 5 },
+};
+
 // 눈 달린 귀여운 차 얼굴 SVG
 function createVehicleWithCuteFace(v: VehicleData): string {
-  // SVG 내부에 깜찍한 눈과 미소 입 추가
+  // 정비소에서 만든 차는 이미 눈이 있으므로 그대로 사용
+  if (v.isCustom) return v.svg;
+
+  const inner = v.svg.replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  const pos = FACE_POS[v.id] || { x: 117, y: 41 };
+  const r = pos.r ?? 6;
+  const gap = r + 3;
+  const eye = (cx: number) => `
+        <circle cx="${cx}" cy="${pos.y}" r="${r}" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/>
+        <circle cx="${cx + r * 0.3}" cy="${pos.y}" r="${r * 0.58}" fill="#0f172a"/>
+        <circle cx="${cx + r * 0.5}" cy="${pos.y - r * 0.25}" r="${r * 0.22}" fill="#ffffff"/>`;
+
   return `
     <svg viewBox="0 0 160 100" class="w-full h-full drop-shadow-md">
-      <!-- 기존 탈것 본체 -->
-      ${v.svg.replace('<svg viewBox="0 0 160 100" class="w-full h-full drop-shadow-md">', '').replace('</svg>', '')}
-      
-      <!-- 눈 달린 귀여운 캐릭터 얼굴 -->
+      ${inner}
       <g class="cute-face">
-        <!-- 왼쪽 눈 (흰자 + 반짝이는 눈동자) -->
-        <circle cx="108" cy="40" r="7" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/>
-        <circle cx="110" cy="40" r="4" fill="#0f172a"/>
-        <circle cx="111.5" cy="38.5" r="1.5" fill="#ffffff"/>
-        
-        <!-- 오른쪽 눈 -->
-        <circle cx="126" cy="40" r="7" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/>
-        <circle cx="128" cy="40" r="4" fill="#0f172a"/>
-        <circle cx="129.5" cy="38.5" r="1.5" fill="#ffffff"/>
-
-        <!-- 발그레 볼터치 -->
-        <circle cx="102" cy="48" r="4" fill="#f43f5e" opacity="0.6"/>
-        <circle cx="132" cy="48" r="4" fill="#f43f5e" opacity="0.6"/>
-
-        <!-- 방긋 미소 입 -->
-        <path d="M 113 46 Q 117 52 121 46" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        ${eye(pos.x - gap)}
+        ${eye(pos.x + gap)}
+        <circle cx="${pos.x - gap - r}" cy="${pos.y + r + 2}" r="${r * 0.55}" fill="#f43f5e" opacity="0.55"/>
+        <circle cx="${pos.x + gap + r}" cy="${pos.y + r + 2}" r="${r * 0.55}" fill="#f43f5e" opacity="0.55"/>
+        <path d="M ${pos.x - 4} ${pos.y + r + 1} Q ${pos.x} ${pos.y + r + 6} ${pos.x + 4} ${pos.y + r + 1}" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
       </g>
     </svg>
   `;

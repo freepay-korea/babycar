@@ -68,10 +68,16 @@ export const carWashMode: PlayMode = {
     vehicleCard.className =
       'vehicle-unit relative w-72 h-44 md:w-96 md:h-60 flex items-center justify-center transition-all duration-700 ease-out';
 
-    // 진흙 & 거품 인터랙션 캔버스
+    // 자동차 그림 자리 (차가 바뀔 때 이 안만 교체)
+    const svgHolder = document.createElement('div');
+    svgHolder.className = 'absolute inset-0 flex items-center justify-center drop-shadow-2xl';
+    vehicleCard.appendChild(svgHolder);
+
+    // 진흙 & 거품 인터랙션 캔버스 (차 위에 겹쳐서 차와 함께 움직임)
     const canvas = document.createElement('canvas');
     canvas.className = 'absolute inset-0 w-full h-full z-20 pointer-events-none';
     const cCtx = canvas.getContext('2d')!;
+    vehicleCard.appendChild(canvas);
 
     // 반짝반짝 광택 오버레이
     const sparkleOverlay = document.createElement('div');
@@ -80,7 +86,6 @@ export const carWashMode: PlayMode = {
     sparkleOverlay.innerHTML = `<span class="animate-bounce">✨ 🌟 💖 🌟 ✨</span>`;
 
     stageBay.appendChild(vehicleCard);
-    stageBay.appendChild(canvas);
     stageBay.appendChild(sparkleOverlay);
     container.appendChild(stageBay);
 
@@ -100,22 +105,9 @@ export const carWashMode: PlayMode = {
 
     el.appendChild(container);
 
-    // 캔버스 크기 조정
-    const resizeCanvas = () => {
-      canvas.width = stageBay.clientWidth || 360;
-      canvas.height = stageBay.clientHeight || 240;
-      renderOverlay();
-    };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
     // 자동차 그래픽 렌더
     const renderVehicle = (v: VehicleData) => {
-      vehicleCard.innerHTML = `
-        <div class="w-full h-full flex items-center justify-center drop-shadow-2xl">
-          ${v.svg}
-        </div>
-      `;
+      svgHolder.innerHTML = v.svg;
     };
     renderVehicle(currentVehicle);
 
@@ -165,7 +157,15 @@ export const carWashMode: PlayMode = {
         }
       }
     };
-    renderOverlay();
+    // 캔버스 크기 조정 (renderOverlay 정의 뒤에 호출해야 함)
+    const resizeCanvas = () => {
+      canvas.width = vehicleCard.clientWidth || 288;
+      canvas.height = vehicleCard.clientHeight || 176;
+      renderOverlay();
+    };
+    resizeCanvas();
+    const resizeObserver = new ResizeObserver(resizeCanvas);
+    resizeObserver.observe(vehicleCard);
 
     // 단계별 UI 및 안내 업데이트
     const updateStageBadges = () => {
@@ -209,10 +209,18 @@ export const carWashMode: PlayMode = {
       if (stage === 'celebrate' || stage === 'transition') return;
 
       const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) return;
+      if (rect.width === 0 || rect.height === 0) return;
+      // 화면 좌표 → 캔버스 좌표 (차 주변을 살짝 벗어나도 닦이게 여유를 둠)
+      const x = Math.max(0, Math.min(canvas.width - 1, ((clientX - rect.left) / rect.width) * canvas.width));
+      const y = Math.max(0, Math.min(canvas.height - 1, ((clientY - rect.top) / rect.height) * canvas.height));
+      const margin = 40;
+      if (
+        clientX < rect.left - margin ||
+        clientX > rect.right + margin ||
+        clientY < rect.top - margin ||
+        clientY > rect.bottom + margin
+      )
+        return;
 
       const cellW = canvas.width / COLS;
       const cellH = canvas.height / ROWS;
@@ -244,9 +252,11 @@ export const carWashMode: PlayMode = {
       renderOverlay();
 
       if (stage === 'mud') {
-        ctx.audio.playBubble();
-        ctx.audio.triggerHaptic(15);
-        burst(clientX, clientY, 'bubble', 3);
+        if (ctx.audio.throttle('wash-bubble', 110)) {
+          ctx.audio.playBubble();
+          ctx.audio.triggerHaptic(15);
+          burst(clientX, clientY, 'bubble', 3);
+        }
 
         const remainingMudRatio = mudGrid.filter(Boolean).length / TOTAL_CELLS;
         updateStageBadges();
@@ -261,9 +271,11 @@ export const carWashMode: PlayMode = {
           updateStageBadges();
         }
       } else if (stage === 'water') {
-        ctx.audio.playWater();
-        ctx.audio.triggerHaptic(20);
-        burst(clientX, clientY, 'drop', 4);
+        if (ctx.audio.throttle('wash-water', 160)) {
+          ctx.audio.playWater();
+          ctx.audio.triggerHaptic(20);
+          burst(clientX, clientY, 'drop', 4);
+        }
 
         const remainingBubbleRatio = bubbleGrid.filter(Boolean).length / TOTAL_CELLS;
         updateStageBadges();
@@ -295,9 +307,16 @@ export const carWashMode: PlayMode = {
       isPointerDown = false;
     };
 
+    // 완료 축하 중 남은 타이머 정리용
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const later = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(() => !isCleanedUp && fn(), ms));
+    };
+
     stageBay.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
 
     // 완료 축하 및 다른 차 입장 루프
     const triggerFinishCelebration = () => {
@@ -314,8 +333,7 @@ export const carWashMode: PlayMode = {
       sparkleOverlay.style.opacity = '1';
 
       // 2. 1.8초 후 깨끗해진 차가 빵빵 울리며 오른쪽으로 퇴장
-      setTimeout(() => {
-        if (isCleanedUp) return;
+      later(() => {
         stage = 'transition';
         ctx.audio.playHorn();
         ctx.audio.playEngine();
@@ -324,9 +342,7 @@ export const carWashMode: PlayMode = {
         vehicleCard.style.transform = 'translateX(120vw) rotate(4deg)';
 
         // 3. 차가 떠나고 새 차가 왼쪽에서 들어옴
-        setTimeout(() => {
-          if (isCleanedUp) return;
-
+        later(() => {
           // 다음 탈것으로 교체
           vehicleIndex = (vehicleIndex + 1) % VEHICLES.length;
           currentVehicle = VEHICLES[vehicleIndex];
@@ -346,15 +362,14 @@ export const carWashMode: PlayMode = {
           vehicleCard.style.transition = 'none';
           vehicleCard.style.transform = 'translateX(-120vw) rotate(-4deg)';
 
-          setTimeout(() => {
-            if (isCleanedUp) return;
+          later(() => {
             vehicleCard.style.transition = 'transform 0.7s ease-out';
             vehicleCard.style.transform = 'translateX(0) rotate(0deg)';
 
             stage = 'mud';
             updateStageBadges();
             ctx.audio.playDing(880);
-            ctx.audio.speak(`새로운 ${currentVehicle.name}가 왔어요! 깨끗이 씻어줄까요?`);
+            ctx.audio.speak(`새로운 ${currentVehicle.name}${hasBatchim(currentVehicle.name) ? '이' : '가'} 왔어요! 깨끗이 씻어줄까요?`);
           }, 80);
         }, 800);
       }, 2000);
@@ -362,9 +377,11 @@ export const carWashMode: PlayMode = {
 
     return () => {
       isCleanedUp = true;
-      window.removeEventListener('resize', resizeCanvas);
+      timers.forEach(clearTimeout);
+      resizeObserver.disconnect();
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       stageBay.removeEventListener('pointerdown', onPointerDown);
       if (container.parentElement) {
         container.parentElement.removeChild(container);
@@ -372,3 +389,9 @@ export const carWashMode: PlayMode = {
     };
   },
 };
+
+// 한글 받침 여부 (이/가 조사 선택)
+function hasBatchim(word: string): boolean {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return code >= 0 && code <= 11171 && code % 28 !== 0;
+}

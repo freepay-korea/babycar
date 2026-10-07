@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.meen.bungbung',
-  appName: '붕붕 놀이터',
+  appName: '부릉부릉 놀이터',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -29,7 +29,7 @@ const config: CapacitorConfig = {
     scheme: 'BungBungPlayground',
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
   },
 };
 

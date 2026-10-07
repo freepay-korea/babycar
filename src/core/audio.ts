@@ -17,9 +17,41 @@ class AudioManager {
   private ttsEnabled = true;
   private sfxEnabled = true;
   private currentHowls: Map<string, Howl> = new Map();
+  private volume = 0.8;
+  private lastPlayed: Map<string, number> = new Map();
 
   constructor() {
     this.setupUnlockListeners();
+    this.setupIosAudioSession();
+  }
+
+  // iOS 무음 스위치가 켜져 있어도 효과음이 나도록 재생(playback) 세션으로 지정 (Safari 16.4+)
+  private setupIosAudioSession() {
+    try {
+      const nav = navigator as unknown as { audioSession?: { type: string } };
+      if (nav.audioSession) nav.audioSession.type = 'playback';
+    } catch {
+      // 지원하지 않는 브라우저
+    }
+  }
+
+  // 같은 소리가 너무 촘촘히 겹치지 않게 (문지르기·드래그 중 소리 폭주 방지)
+  public throttle(key: string, intervalMs: number): boolean {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const last = this.lastPlayed.get(key) ?? -Infinity;
+    if (now - last < intervalMs) return false;
+    this.lastPlayed.set(key, now);
+    return true;
+  }
+
+  public setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.sfxGain) this.sfxGain.gain.value = this.volume;
+    this.currentHowls.forEach((h) => h.volume(this.volume));
+  }
+
+  public getVolume(): number {
+    return this.volume;
   }
 
   // 첫 터치에서 오디오 컨텍스트 잠금 해제
@@ -49,7 +81,7 @@ class AudioManager {
       if (!this.ctx && AudioCtx) {
         this.ctx = new AudioCtx();
         this.sfxGain = this.ctx.createGain();
-        this.sfxGain.gain.value = 0.8;
+        this.sfxGain.gain.value = this.volume;
         this.sfxGain.connect(this.ctx.destination);
       }
 
@@ -346,6 +378,124 @@ class AudioManager {
     }
   }
 
+  // 9. 터널 울림 (우웅~ 낮게 울리는 소리)
+  public playTunnel() {
+    if (!this.sfxEnabled) return;
+    this.unlockAudio();
+    if (!this.ctx || !this.sfxGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      [110, 165].forEach((freq) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.linearRampToValueAtTime(freq * 0.8, t + 0.8);
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.exponentialRampToValueAtTime(0.35, t + 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+        osc.connect(gain);
+        gain.connect(this.sfxGain!);
+        osc.start(t);
+        osc.stop(t + 0.92);
+      });
+    } catch {
+      // safe catch
+    }
+  }
+
+  // 10. 폴짝 점프 (뾰로롱 올라가는 소리)
+  public playBoing() {
+    if (!this.sfxEnabled) return;
+    this.unlockAudio();
+    if (!this.ctx || !this.sfxGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(880, t + 0.18);
+      osc.frequency.exponentialRampToValueAtTime(440, t + 0.4);
+      gain.gain.setValueAtTime(0.35, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 0.45);
+    } catch {
+      // safe catch
+    }
+  }
+
+  // 11. 드릴 조이는 소리 (위잉- 착!)
+  public playDrill() {
+    if (!this.sfxEnabled) return;
+    this.unlockAudio();
+    if (!this.ctx || !this.sfxGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      const gain = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(380, t);
+      osc.frequency.linearRampToValueAtTime(620, t + 0.35);
+      lfo.frequency.value = 40;
+      lfoGain.gain.value = 60;
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.setValueAtTime(0.12, t + 0.32);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      lfo.start(t);
+      osc.stop(t + 0.42);
+      lfo.stop(t + 0.42);
+    } catch {
+      // safe catch
+    }
+    // 마지막에 "착!"
+    setTimeout(() => this.playPop(900), 380);
+  }
+
+  // 12. 흙 쏟아지는 소리 (콸르르)
+  public playDirtPour() {
+    if (!this.sfxEnabled) return;
+    this.unlockAudio();
+    if (!this.ctx || !this.sfxGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      const dur = 0.7;
+      const bufferSize = Math.floor(this.ctx.sampleRate * dur);
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        // 자글자글 끊기는 잡음
+        data[i] = (Math.random() * 2 - 1) * (Math.random() < 0.3 ? 1 : 0.25);
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(900, t);
+      filter.frequency.exponentialRampToValueAtTime(300, t + dur);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+      noise.start(t);
+      noise.stop(t + dur);
+    } catch {
+      // safe catch
+    }
+  }
+
   // 사운드 이펙트 이름으로 재생
   public setSoundMuted(muted: boolean) {
     this.sfxEnabled = !muted;
@@ -430,12 +580,12 @@ class AudioManager {
       if (!sound) {
         sound = new Howl({
           src: [url],
-          volume,
+          volume: volume * this.volume,
           html5: false,
         });
         this.currentHowls.set(url, sound);
       }
-      sound.volume(volume);
+      sound.volume(volume * this.volume);
       sound.play();
     } catch {
       // fallback
@@ -455,7 +605,7 @@ class AudioManager {
       utterance.rate = 0.95; // 유아가 편안하게 듣는 약간 부드럽고 또렷한 속도
       utterance.pitch = 1.25; // 밝고 친근한 톤
 
-      // 사용 가능한 한국어 음성 탐색
+      // 사용 가능한 한국어 음성 탐색 (목록이 아직 비어 있으면 브라우저 기본 ko-KR 사용)
       const voices = window.speechSynthesis.getVoices();
       const koVoice = voices.find((v) => v.lang.startsWith('ko'));
       if (koVoice) {

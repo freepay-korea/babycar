@@ -43,10 +43,11 @@ export const BedtimeLockScreen: React.FC<BedtimeLockScreenProps> = ({
 
   // 부모 게이트 3초 롱프레스 핸들러
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     if (longPressProgress > 0 && longPressProgress < 100) {
+      // 50ms마다 100/60씩 → 약 3초
       timer = setTimeout(() => {
-        setLongPressProgress((prev) => Math.min(100, prev + 4));
+        setLongPressProgress((prev) => Math.min(100, prev + 100 / 60));
       }, 50);
     } else if (longPressProgress >= 100) {
       setLongPressProgress(0);
@@ -58,7 +59,7 @@ export const BedtimeLockScreen: React.FC<BedtimeLockScreenProps> = ({
   }, [longPressProgress, onOpenParentGate]);
 
   const handlePointerDown = () => {
-    setLongPressProgress(4);
+    setLongPressProgress(1);
     audioManager.playPop(450);
   };
 
@@ -148,6 +149,7 @@ export const BedtimeLockScreen: React.FC<BedtimeLockScreenProps> = ({
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 text-xs font-black text-slate-300 shadow-xl active:scale-95 transition-all cursor-pointer"
           >
             <Lock className="w-4 h-4 text-amber-400" />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getAllModes } from '../modes/registry';
 import { audioManager } from '../core/audio';
+import { useAppStore } from '../core/store';
 import { Volume2, VolumeX, Mic, MicOff, Settings } from 'lucide-react';
 
 interface HomeProps {
@@ -10,17 +11,20 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ onSelectMode, onOpenParentGate }) => {
   const modes = getAllModes();
-  const [sfxOn, setSfxOn] = useState(audioManager.getSfxEnabled());
-  const [ttsOn, setTtsOn] = useState(audioManager.getTtsEnabled());
+  const sfxOn = useAppStore((s) => s.soundEnabled);
+  const ttsOn = useAppStore((s) => s.voiceEnabled);
+  const toggleSound = useAppStore((s) => s.toggleSound);
+  const setVoiceEnabled = useAppStore((s) => s.setVoiceEnabled);
   const [clickedModeId, setClickedModeId] = useState<string | null>(null);
   const [longPressProgress, setLongPressProgress] = useState(0);
 
   // 톱니바퀴 3초 롱프레스 타이머
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     if (longPressProgress > 0 && longPressProgress < 100) {
+      // 50ms마다 100/60씩 → 약 3초
       timer = setTimeout(() => {
-        setLongPressProgress((prev) => Math.min(100, prev + 3.5));
+        setLongPressProgress((prev) => Math.min(100, prev + 100 / 60));
       }, 50);
     } else if (longPressProgress >= 100) {
       setLongPressProgress(0);
@@ -33,6 +37,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onOpenParentGate }) =>
   }, [longPressProgress, onOpenParentGate]);
 
   const handleModeClick = (modeId: string, title: string) => {
+    if (clickedModeId) return; // 연타 방지
     setClickedModeId(modeId);
     audioManager.playPop(580);
     audioManager.speak(title);
@@ -45,20 +50,18 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onOpenParentGate }) =>
 
   const toggleSfx = () => {
     const next = !sfxOn;
-    setSfxOn(next);
-    audioManager.setSfxEnabled(next);
+    toggleSound();
     if (next) audioManager.playPop(500);
   };
 
   const toggleTts = () => {
     const next = !ttsOn;
-    setTtsOn(next);
-    audioManager.setTtsEnabled(next);
+    setVoiceEnabled(next);
     if (next) audioManager.speak('목소리를 켰어요');
   };
 
   const handleSettingsDown = () => {
-    setLongPressProgress(4);
+    setLongPressProgress(1);
     audioManager.playPop(480);
   };
 
@@ -148,6 +151,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onOpenParentGate }) =>
               onPointerDown={handleSettingsDown}
               onPointerUp={handleSettingsUp}
               onPointerLeave={handleSettingsUp}
+              onPointerCancel={handleSettingsUp}
               aria-label="부모 설정 (3초 누름)"
               className="w-12 h-12 md:w-13 md:h-13 rounded-2xl flex items-center justify-center bg-white/90 hover:bg-white border-3 border-amber-300 text-slate-700 shadow-md transition-all active:scale-90 cursor-pointer relative overflow-hidden"
             >

@@ -12,6 +12,7 @@ export interface VehicleData {
   color: string;
   accentColor: string;
   soundType: string;
+  isCustom?: boolean;
 }
 
 export const VEHICLES: VehicleData[] = [
@@ -33,7 +34,7 @@ export const VEHICLES: VehicleData[] = [
       <line x1="95" y1="16" x2="95" y2="24" stroke="#94a3b8" stroke-width="3"/>
       <!-- 사이렌 -->
       <rect x="110" y="14" width="14" height="10" rx="3" fill="#38bdf8"/>
-      <circle x="117" y="12" r="3" fill="#ef4444"/>
+      <circle cx="117" cy="12" r="3" fill="#ef4444"/>
       <!-- 차체 메인 -->
       <rect x="20" y="24" width="120" height="52" rx="8" fill="#ef4444"/>
       <!-- 흰색 줄무늬 -->
@@ -208,10 +209,11 @@ export function carDesignToVehicleData(car: CarDesign): VehicleData {
     bgColor: car.colors?.body || '#3b82f6',
     color: car.colors?.body || '#3b82f6',
     accentColor: car.colors?.bumper || '#f59e0b',
-    sound: car.wheels === 'monster' ? 'engine' : car.wheels === 'lightning' ? 'horn' : 'horn',
+    sound: car.body === 'fire-truck' ? 'siren' : car.wheels === 'monster' ? 'engine' : 'horn',
     soundType: car.wheels === 'monster' ? 'excavator' : 'bus',
     emoji: car.body === 'truck' ? '🚚' : car.body === 'bus' ? '🚌' : car.body === 'fire-truck' ? '🚒' : '🏎️',
     svg: car.svg,
+    isCustom: true,
   };
 }
 
