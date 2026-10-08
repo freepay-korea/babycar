@@ -1,7 +1,7 @@
-import { Application, Container, Graphics, Ticker } from 'pixi.js';
+import { Application, Container, Graphics, Text, Ticker } from 'pixi.js';
 import { PlayMode, PlayModeContext } from '../types';
 import { getCombinedVehicles, VehicleData, getVehicleById } from '../../core/vehicles';
-import { useAppStore } from '../../core/store';
+import { useAppStore, CarDesign } from '../../core/store';
 import { ParticleEngine, triggerCelebrationConfetti } from '../../core/particles';
 
 interface Point {
@@ -101,8 +101,7 @@ export const roadDrawMode: PlayMode = {
     };
     allVehicles.forEach((v) => {
       const vBtn = document.createElement('button');
-      // 정비소에서 만든 차는 그림(썸네일), 기본 탈것은 이모지
-      vBtn.innerHTML = v.isCustom ? v.svg : v.emoji;
+      vBtn.innerHTML = v.svg;
       styleVehicleButton(vBtn, v.id === currentVehicle.id);
       vBtn.onclick = () => {
         currentVehicle = v;
@@ -138,17 +137,28 @@ export const roadDrawMode: PlayMode = {
     divider.className = 'w-px h-12 bg-emerald-200 mx-1';
     bottomControls.appendChild(divider);
 
-    const rerunBtn = document.createElement('button');
-    rerunBtn.className =
-      'w-16 h-16 rounded-2xl bg-emerald-500 active:scale-90 text-white text-3xl border-3 border-emerald-300 shadow-lg flex items-center justify-center cursor-pointer';
-    rerunBtn.setAttribute('aria-label', '다시 달리기');
-    rerunBtn.textContent = '🔁';
-    rerunBtn.onclick = () => {
+    // 출발 버튼: 길을 그리고 아이템을 다 놓은 뒤 누르면 달림 (준비되면 통통 튀며 알려 줌)
+    const startBtn = document.createElement('button');
+    startBtn.setAttribute('aria-label', '출발');
+    startBtn.innerHTML = `
+      <svg viewBox="0 0 40 40" class="w-9 h-9"><path d="M11 7 L33 20 L11 33 Z" fill="currentColor"/></svg>`;
+    const setStartState = (state: 'none' | 'ready' | 'driving') => {
+      startBtn.dataset.state = state;
+      startBtn.className = `w-20 h-16 rounded-2xl text-white border-3 shadow-lg flex items-center justify-center cursor-pointer transition-all ${
+        state === 'ready'
+          ? 'bg-emerald-500 border-emerald-300 active:scale-90 animate-soft-bounce ring-4 ring-emerald-200'
+          : state === 'driving'
+            ? 'bg-emerald-600 border-emerald-400 active:scale-90'
+            : 'bg-gray-300 border-gray-200 opacity-60'
+      }`;
+    };
+    setStartState('none');
+    startBtn.onclick = () => {
       if (smoothedPath.length > 1) {
         startDrive();
       } else {
         ctx.audio.playPop(400);
-        ctx.audio.speak('손가락으로 길을 그려 보세요!');
+        ctx.audio.speak('먼저 손가락으로 길을 그려 보세요!');
       }
     };
 
@@ -159,7 +169,7 @@ export const roadDrawMode: PlayMode = {
     clearBtn.textContent = '🚜';
     clearBtn.onclick = () => triggerBulldozerClear();
 
-    bottomControls.appendChild(rerunBtn);
+    bottomControls.appendChild(startBtn);
     bottomControls.appendChild(clearBtn);
     uiOverlay.appendChild(bottomControls);
     el.appendChild(uiOverlay);
@@ -183,6 +193,7 @@ export const roadDrawMode: PlayMode = {
 
     flagLayer.addChild(startFlag, finishFlag);
     carContainer.addChild(carShadow, carBody);
+    carContainer.scale.set(1.3); // 도로 폭(56px)에 맞는 크기
 
     const width = () => el.clientWidth || window.innerWidth;
     const height = () => el.clientHeight || window.innerHeight;
@@ -293,30 +304,211 @@ export const roadDrawMode: PlayMode = {
       finishFlag.addChild(g);
     };
 
-    // 위에서 내려다본 귀여운 차 (선택한 탈것 색)
+    // 위에서 내려다본 탈것 (종류마다 생김새가 다름). 앞쪽이 +x
+    let rotor: Graphics | null = null;
+    let chimney: { x: number; y: number } | null = null;
     const drawCar = () => {
-      const vColor = parseInt(currentVehicle.bgColor.replace('#', ''), 16);
-      const color = Number.isFinite(vColor) ? vColor : 0xef4444;
-      carShadow.clear();
-      carShadow.roundRect(-22, -11, 48, 28, 10).fill({ color: 0x000000, alpha: 0.18 });
-      carBody.clear();
-      // 바퀴
-      carBody.roundRect(-17, -16, 10, 6, 2).fill({ color: 0x1e293b });
-      carBody.roundRect(8, -16, 10, 6, 2).fill({ color: 0x1e293b });
-      carBody.roundRect(-17, 10, 10, 6, 2).fill({ color: 0x1e293b });
-      carBody.roundRect(8, 10, 10, 6, 2).fill({ color: 0x1e293b });
-      // 차체
-      carBody.roundRect(-24, -13, 48, 26, 9).fill({ color }).stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
-      // 창문
-      carBody.roundRect(-4, -9, 14, 18, 4).fill({ color: 0xe0f2fe });
-      // 헤드라이트
-      carBody.circle(22, -7, 3).fill({ color: 0xfef08a });
-      carBody.circle(22, 7, 3).fill({ color: 0xfef08a });
-      // 깜찍한 눈
-      carBody.circle(15, -5, 3).fill({ color: 0xffffff });
-      carBody.circle(15.8, -5, 1.8).fill({ color: 0x0f172a });
-      carBody.circle(15, 5, 3).fill({ color: 0xffffff });
-      carBody.circle(15.8, 5, 1.8).fill({ color: 0x0f172a });
+      carBody.removeChildren().forEach((c) => c.destroy());
+      rotor = null;
+      chimney = null;
+      const g = new Graphics();
+      carBody.addChild(g);
+      const design = currentVehicle.isCustom ? customCars.find((c) => c.id === currentVehicle.id) : undefined;
+      const toColor = (hex: string, fallback: number) => {
+        const n = parseInt(hex.replace('#', ''), 16);
+        return Number.isFinite(n) ? n : fallback;
+      };
+      const main = toColor(currentVehicle.bgColor, 0xef4444);
+
+      const wheels = (xs: number[], w = 10, h = 6, color = 0x1e293b) => {
+        xs.forEach((x) => {
+          g.roundRect(x - w / 2, -16 - h / 2 + 2, w, h, 2).fill({ color });
+          g.roundRect(x - w / 2, 16 - h / 2 - 2, w, h, 2).fill({ color });
+        });
+      };
+      const eyes = (x: number) => {
+        g.circle(x, -5, 3).fill({ color: 0xffffff });
+        g.circle(x + 0.8, -5, 1.8).fill({ color: 0x0f172a });
+        g.circle(x, 5, 3).fill({ color: 0xffffff });
+        g.circle(x + 0.8, 5, 1.8).fill({ color: 0x0f172a });
+      };
+      const headlights = (x: number) => {
+        g.circle(x, -8, 2.6).fill({ color: 0xfef08a });
+        g.circle(x, 8, 2.6).fill({ color: 0xfef08a });
+      };
+      const shadowOf = (w: number, h: number) => {
+        carShadow.clear();
+        carShadow.roundRect(-w / 2 + 2, -h / 2 + 3, w, h, 10).fill({ color: 0x000000, alpha: 0.18 });
+      };
+
+      switch (design ? 'custom' : currentVehicle.id) {
+        case 'fire-truck': {
+          shadowOf(64, 30);
+          wheels([-20, -6, 18], 10, 6);
+          g.roundRect(-32, -13, 64, 26, 7).fill({ color: 0xef4444 }).stroke({ width: 2, color: 0xfecaca, alpha: 0.8 });
+          g.rect(-32, -2, 64, 4).fill({ color: 0xffffff }); // 흰 띠
+          g.roundRect(14, -10, 14, 20, 4).fill({ color: 0xbae6fd }); // 앞 유리
+          // 사다리
+          g.roundRect(-28, -4, 36, 8, 2).fill({ color: 0x94a3b8 });
+          for (let k = -24; k <= 4; k += 7) g.rect(k, -4, 2, 8).fill({ color: 0x475569 });
+          g.circle(10, 0, 3.5).fill({ color: 0x38bdf8 }); // 경광등
+          headlights(31);
+          eyes(22);
+          break;
+        }
+        case 'police-car': {
+          shadowOf(54, 28);
+          wheels([-16, 16]);
+          g.roundRect(-27, -12, 54, 24, 7).fill({ color: 0xffffff }).stroke({ width: 2, color: 0xcbd5e1 });
+          g.roundRect(-27, -12, 14, 24, 6).fill({ color: 0x3b82f6 });
+          g.roundRect(13, -12, 14, 24, 6).fill({ color: 0x3b82f6 });
+          g.roundRect(-10, -9, 22, 18, 4).fill({ color: 0xbae6fd }); // 지붕 창
+          g.rect(-3, -9, 6, 8).fill({ color: 0xef4444 }); // 경광등 빨강
+          g.rect(-3, 1, 6, 8).fill({ color: 0x38bdf8 }); // 경광등 파랑
+          headlights(26);
+          eyes(18);
+          break;
+        }
+        case 'bus': {
+          shadowOf(70, 30);
+          wheels([-22, 22], 10, 6);
+          g.roundRect(-35, -13, 70, 26, 8).fill({ color: 0xfacc15 }).stroke({ width: 2, color: 0xfde68a });
+          g.rect(-35, -13, 70, 3).fill({ color: 0x0284c7 });
+          g.rect(-35, 10, 70, 3).fill({ color: 0x0284c7 });
+          for (let k = -28; k <= 10; k += 11) {
+            g.roundRect(k, -9, 8, 5, 1.5).fill({ color: 0xe0f2fe });
+            g.roundRect(k, 4, 8, 5, 1.5).fill({ color: 0xe0f2fe });
+          }
+          g.roundRect(22, -9, 10, 18, 3).fill({ color: 0xe0f2fe });
+          g.roundRect(-8, -4, 12, 8, 2).fill({ color: 0xfde68a }); // 지붕 환풍구
+          headlights(34);
+          eyes(26);
+          break;
+        }
+        case 'excavator': {
+          shadowOf(66, 32);
+          // 무한궤도
+          g.roundRect(-26, -16, 40, 8, 4).fill({ color: 0x1e293b });
+          g.roundRect(-26, 8, 40, 8, 4).fill({ color: 0x1e293b });
+          for (let k = -22; k <= 10; k += 8) {
+            g.rect(k, -15, 2, 6).fill({ color: 0x64748b });
+            g.rect(k, 9, 2, 6).fill({ color: 0x64748b });
+          }
+          g.roundRect(-22, -11, 30, 22, 6).fill({ color: 0xf97316 }); // 조종석
+          g.roundRect(-14, -8, 14, 16, 3).fill({ color: 0xbae6fd });
+          g.roundRect(6, -4, 30, 8, 3).fill({ color: 0xf97316 }); // 팔
+          g.circle(8, 0, 4).fill({ color: 0x334155 });
+          g.roundRect(32, -9, 10, 18, 3).fill({ color: 0x334155 }); // 버킷
+          for (let k = -6; k <= 6; k += 6) g.rect(41, k - 1, 4, 2).fill({ color: 0x94a3b8 });
+          eyes(-3);
+          break;
+        }
+        case 'train': {
+          shadowOf(66, 30);
+          wheels([-22, -8, 8, 22], 8, 5);
+          g.roundRect(-33, -11, 44, 22, 5).fill({ color: 0x7c3aed }); // 기관실
+          g.roundRect(-30, -8, 18, 16, 3).fill({ color: 0xe0f2fe });
+          g.roundRect(8, -10, 26, 20, 10).fill({ color: 0x8b5cf6 }); // 보일러
+          g.circle(30, 0, 5).fill({ color: 0xfacc15 }); // 앞 등
+          g.circle(18, 0, 5).fill({ color: 0x475569 }); // 굴뚝
+          g.circle(18, 0, 2.5).fill({ color: 0x1e293b });
+          g.rect(-33, -2, 44, 4).fill({ color: 0xfacc15, alpha: 0.6 });
+          chimney = { x: 18, y: 0 };
+          eyes(26);
+          break;
+        }
+        case 'helicopter': {
+          shadowOf(64, 30);
+          // 스키드
+          g.roundRect(-14, -17, 30, 3, 1.5).fill({ color: 0x475569 });
+          g.roundRect(-14, 14, 30, 3, 1.5).fill({ color: 0x475569 });
+          g.roundRect(-40, -3, 30, 6, 3).fill({ color: 0x0891b2 }); // 꼬리
+          g.roundRect(-42, -8, 5, 16, 2).fill({ color: 0x0891b2 });
+          g.circle(-39, 0, 7).stroke({ width: 2, color: 0x64748b });
+          g.ellipse(0, 0, 22, 13).fill({ color: 0x06b6d4 });
+          g.ellipse(9, 0, 9, 9).fill({ color: 0xe0f2fe }); // 앞 유리
+          eyes(10);
+          rotor = new Graphics();
+          for (let k = 0; k < 4; k++) {
+            const a = (k * Math.PI) / 2;
+            rotor.poly([
+              Math.cos(a) * 3 - Math.sin(a) * 2, Math.sin(a) * 3 + Math.cos(a) * 2,
+              Math.cos(a) * 30 - Math.sin(a) * 2, Math.sin(a) * 30 + Math.cos(a) * 2,
+              Math.cos(a) * 30 + Math.sin(a) * 2, Math.sin(a) * 30 - Math.cos(a) * 2,
+              Math.cos(a) * 3 + Math.sin(a) * 2, Math.sin(a) * 3 - Math.cos(a) * 2,
+            ]).fill({ color: 0x334155, alpha: 0.85 });
+          }
+          rotor.circle(0, 0, 4).fill({ color: 0x1e293b });
+          carBody.addChild(rotor);
+          break;
+        }
+        case 'custom': {
+          const d = design as CarDesign;
+          const body = toColor(d.colors.body, main);
+          const roof = toColor(d.colors.roof, 0x60a5fa);
+          const bumper = toColor(d.colors.bumper, 0x1e293b);
+          const long = d.body === 'bus' || d.body === 'truck' || d.body === 'fire-truck';
+          const L = long ? 64 : d.body === 'sportscar' ? 56 : 52;
+          shadowOf(L, 30);
+          // 바퀴 종류
+          const wx = long ? [-20, 18] : [-15, 15];
+          if (d.wheels === 'monster') wheels(wx, 14, 9, 0x0f172a);
+          else if (d.wheels === 'lightning') {
+            wheels(wx, 11, 6);
+            wx.forEach((x) => {
+              g.rect(x - 2, -17, 4, 3).fill({ color: 0xfacc15 });
+              g.rect(x - 2, 14, 4, 3).fill({ color: 0xfacc15 });
+            });
+          } else if (d.wheels === 'flower') {
+            wheels(wx, 10, 6, 0xf43f5e);
+            wx.forEach((x) => {
+              g.circle(x, -16, 2).fill({ color: 0xfef08a });
+              g.circle(x, 16, 2).fill({ color: 0xfef08a });
+            });
+          } else wheels(wx);
+          g.roundRect(-L / 2, -13, L, 26, d.body === 'sportscar' ? 12 : 7).fill({ color: body }).stroke({ width: 2, color: 0xffffff, alpha: 0.5 });
+          // 지붕
+          if (d.body === 'truck') {
+            g.roundRect(-L / 2 + 3, -10, L * 0.55, 20, 4).fill({ color: roof });
+            g.roundRect(L / 2 - 20, -9, 12, 18, 3).fill({ color: 0xbae6fd });
+          } else if (d.body === 'bus') {
+            g.roundRect(-L / 2 + 4, -9, L - 8, 18, 4).fill({ color: roof });
+            for (let k = -L / 2 + 8; k < L / 2 - 10; k += 11) {
+              g.roundRect(k, -8, 7, 4, 1).fill({ color: 0xe0f2fe });
+              g.roundRect(k, 4, 7, 4, 1).fill({ color: 0xe0f2fe });
+            }
+          } else if (d.body === 'fire-truck') {
+            g.roundRect(-L / 2 + 4, -9, L - 8, 18, 4).fill({ color: roof });
+            g.roundRect(-L / 2 + 8, -3, L * 0.5, 6, 2).fill({ color: 0x94a3b8 });
+            g.circle(L / 2 - 16, 0, 3).fill({ color: 0x38bdf8 });
+          } else {
+            g.roundRect(-L * 0.22, -9, L * 0.44, 18, 5).fill({ color: roof });
+            g.roundRect(L * 0.1, -8, 8, 16, 3).fill({ color: 0xbae6fd });
+          }
+          // 범퍼
+          g.rect(L / 2 - 4, -11, 3, 22).fill({ color: bumper });
+          g.rect(-L / 2 + 1, -11, 3, 22).fill({ color: bumper });
+          headlights(L / 2 - 1);
+          eyes(L / 2 - 10);
+          // 스티커 (정비소 좌표 160x100 → 차 위)
+          d.stickers.slice(0, 6).forEach((st) => {
+            const t = new Text({ text: st.icon, style: { fontSize: 11 * st.scale } });
+            t.anchor.set(0.5);
+            t.position.set(((st.x - 80) / 160) * L, ((st.y - 50) / 100) * 22);
+            t.rotation = (st.rot * Math.PI) / 180;
+            carBody.addChild(t);
+          });
+          break;
+        }
+        default: {
+          shadowOf(48, 26);
+          wheels([-14, 14]);
+          g.roundRect(-24, -13, 48, 26, 9).fill({ color: main }).stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+          g.roundRect(-4, -9, 14, 18, 4).fill({ color: 0xe0f2fe });
+          headlights(22);
+          eyes(15);
+        }
+      }
     };
 
     const resetCarToStart = () => {
@@ -411,6 +603,7 @@ export const roadDrawMode: PlayMode = {
       renderRoad(rawPoints);
       renderItems([]);
       finishFlag.visible = false;
+      setStartState('none');
       startPoint = p;
       startFlag.position.set(p.x - 8, p.y - 30);
       carContainer.position.set(p.x, p.y);
@@ -478,18 +671,14 @@ export const roadDrawMode: PlayMode = {
       const last = smoothedPath[smoothedPath.length - 1];
       finishFlag.position.set(last.x + 6, last.y - 26);
 
-      if (easyMode) {
-        // 2세: 차가 이미 손가락을 따라 끝에 도착 → 바로 축하
-        driveProgress = totalDistance;
-        carContainer.position.set(last.x, last.y);
-        carContainer.rotation = last.angle;
-        later(arrive, 300);
-      } else {
-        resetCarToStart();
-        // 손을 떼고 0.3초 뒤 출발
-        later(startDrive, 300);
-      }
+      // 차는 출발선에서 대기. 아이템을 놓고 ▶ 버튼을 누르면 출발
+      resetCarToStart();
+      setStartState('ready');
+      ctx.audio.playDing(880);
+      ctx.audio.speak(placedItems.length === 0 && !hintedItems ? '길이 생겼어요! 터널이나 다리를 놓고 출발 버튼을 눌러요' : '출발 버튼을 눌러요!');
+      hintedItems = true;
     };
+    let hintedItems = false;
 
     // ==========================================
     // 주행
@@ -508,6 +697,7 @@ export const roadDrawMode: PlayMode = {
       });
       renderItems(placedItems);
       resetCarToStart();
+      setStartState('driving');
       ctx.audio.playEngine();
       ctx.audio.triggerHaptic(25);
     };
@@ -516,6 +706,7 @@ export const roadDrawMode: PlayMode = {
       isDriving = false;
       carContainer.alpha = 1;
       carBody.scale.set(1);
+      setStartState('ready');
       const last = smoothedPath[smoothedPath.length - 1];
       if (!last) return;
       finishFlag.visible = true;
@@ -536,6 +727,9 @@ export const roadDrawMode: PlayMode = {
       }
 
       updateBulldozer(d);
+
+      // 헬리콥터 날개는 늘 돌고, 달릴 때 더 빨리
+      if (rotor) rotor.rotation += (isDriving ? 0.6 : 0.12) * d;
 
       if (!isDriving || smoothedPath.length < 2) return;
 
@@ -605,7 +799,14 @@ export const roadDrawMode: PlayMode = {
       dustTick += d;
       if (dustTick > 4 && lift === 0) {
         dustTick = 0;
-        fx.burst(s.x - Math.cos(s.angle) * 24, s.y - Math.sin(s.angle) * 24, 'smoke', 1);
+        if (chimney) {
+          // 기차: 굴뚝에서 칙칙폭폭 연기
+          const cx = s.x + Math.cos(s.angle) * chimney.x - Math.sin(s.angle) * chimney.y;
+          const cy = s.y + Math.sin(s.angle) * chimney.x + Math.cos(s.angle) * chimney.y;
+          fx.burst(cx, cy, 'smoke', 2);
+        } else if (!rotor) {
+          fx.burst(s.x - Math.cos(s.angle) * 24, s.y - Math.sin(s.angle) * 24, 'smoke', 1);
+        }
       }
 
       if (driveProgress >= totalDistance) arrive();
@@ -861,6 +1062,7 @@ export const roadDrawMode: PlayMode = {
         startFlag.visible = true;
         finishFlag.visible = false;
         resetCarToStart();
+        setStartState('none');
         ctx.audio.playDing(880);
       }
     };
